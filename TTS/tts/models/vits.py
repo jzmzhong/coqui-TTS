@@ -22,7 +22,7 @@ from TTS.tts.configs.shared_configs import CharactersConfig
 from TTS.tts.datasets.dataset import TTSDataset, _parse_sample
 from TTS.tts.layers.glow_tts.duration_predictor import DurationPredictor
 from TTS.tts.layers.vits.discriminator import VitsDiscriminator
-from TTS.tts.layers.vits.networks import PosteriorEncoder, ResidualCouplingBlocks, TextEncoder
+from TTS.tts.layers.vits.networks import PosteriorEncoder, ResidualCouplingBlocks, TextEncoder, AccentIdentifier, AccentEncoder
 from TTS.tts.layers.vits.stochastic_duration_predictor import StochasticDurationPredictor
 from TTS.tts.models.base_tts import BaseTTS
 from TTS.tts.utils.fairseq import rehash_fairseq_vits_checkpoint
@@ -598,6 +598,10 @@ class VitsArgs(Coqpit):
     interpolate_z: bool = True
     reinit_DP: bool = False
     reinit_text_encoder: bool = False
+    use_accent_identifier: bool = False
+    accent_clf_hidden_channels: int = None
+    embedded_accent_dim: int = 0
+    detach_dp_input_acc: bool = True
 
 
 class Vits(BaseTTS):
@@ -650,6 +654,20 @@ class Vits(BaseTTS):
         self.max_inference_len = self.args.max_inference_len
         self.spec_segment_size = self.args.spec_segment_size
 
+        if self.args.use_accent_identifier:
+            self.accent_identifier = AccentIdentifier(
+                self.embedded_speaker_dim,
+                self.args.accent_clf_hidden_channels,
+                self.args.num_languages,
+            )
+            self.accent_encoder = AccentEncoder(
+                self.args.num_languages,
+                self.args.embedded_accent_dim,
+            )
+        else:
+            self.accent_identifier = None
+            self.accent_encoder = None
+
         self.text_encoder = TextEncoder(
             self.args.num_chars,
             self.args.hidden_channels,
@@ -660,6 +678,7 @@ class Vits(BaseTTS):
             self.args.kernel_size_text_encoder,
             self.args.dropout_p_text_encoder,
             language_emb_dim=self.embedded_language_dim,
+            accent_emb_dim=self.args.embedded_accent_dim
         )
 
         self.posterior_encoder = PosteriorEncoder(
@@ -689,7 +708,7 @@ class Vits(BaseTTS):
                 self.args.dropout_p_duration_predictor,
                 4,
                 cond_channels=self.embedded_speaker_dim if self.args.condition_dp_on_speaker else 0,
-                language_emb_dim=self.embedded_language_dim,
+                language_emb_dim=self.embedded_language_dim+self.args.embedded_accent_dim,
             )
         else:
             self.duration_predictor = DurationPredictor(
@@ -698,7 +717,7 @@ class Vits(BaseTTS):
                 3,
                 self.args.dropout_p_duration_predictor,
                 cond_channels=self.embedded_speaker_dim,
-                language_emb_dim=self.embedded_language_dim,
+                language_emb_dim=self.embedded_language_dim+self.args.embedded_accent_dim,
             )
 
         self.waveform_decoder = HifiganGenerator(
@@ -906,7 +925,7 @@ class Vits(BaseTTS):
         g = speaker_ids if speaker_ids is not None else d_vectors
         return g
 
-    def forward_mas(self, outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g, lang_emb):
+    def forward_mas(self, outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g, lang_emb, acc_emb=None):
         # find the alignment path
         attn_mask = torch.unsqueeze(x_mask, -1) * torch.unsqueeze(y_mask, 2)
         with torch.no_grad():
@@ -927,6 +946,7 @@ class Vits(BaseTTS):
                 attn_durations,
                 g=g.detach() if self.args.detach_dp_input and g is not None else g,
                 lang_emb=lang_emb.detach() if self.args.detach_dp_input and lang_emb is not None else lang_emb,
+                acc_emb=acc_emb.detach() if self.args.detach_dp_input_acc and acc_emb is not None else acc_emb,
             )
             loss_duration = loss_duration / torch.sum(x_mask)
         else:
@@ -936,6 +956,7 @@ class Vits(BaseTTS):
                 x_mask,
                 g=g.detach() if self.args.detach_dp_input and g is not None else g,
                 lang_emb=lang_emb.detach() if self.args.detach_dp_input and lang_emb is not None else lang_emb,
+                acc_emb=acc_emb.detach() if self.args.detach_dp_input_acc and acc_emb is not None else acc_emb,
             )
             loss_duration = torch.sum((log_durations - attn_log_durations) ** 2, [1, 2]) / torch.sum(x_mask)
         outputs["loss_duration"] = loss_duration
@@ -1015,7 +1036,15 @@ class Vits(BaseTTS):
         if self.args.use_language_embedding and lid is not None:
             lang_emb = self.emb_l(lid).unsqueeze(-1)
 
-        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb)
+        # accent intensity embedding
+        acc_emb = None
+        if self.accent_identifier:
+            acc_clf_out = self.accent_identifier(g)
+            acc_emb = self.accent_encoder(acc_clf_out)
+        else:
+            acc_clf_out = None
+        
+        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb, acc_emb=acc_emb)
 
         # posterior encoder
         z, m_q, logs_q, y_mask = self.posterior_encoder(y, y_lengths, g=g)
@@ -1024,7 +1053,7 @@ class Vits(BaseTTS):
         z_p = self.flow(z, y_mask, g=g)
 
         # duration predictor
-        outputs, attn = self.forward_mas(outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g=g, lang_emb=lang_emb)
+        outputs, attn = self.forward_mas(outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g=g, lang_emb=lang_emb, acc_emb=acc_emb)
 
         # expand prior
         m_p = torch.einsum("klmn, kjm -> kjn", [attn, m_p])
@@ -1075,6 +1104,7 @@ class Vits(BaseTTS):
                 "gt_spk_emb": gt_spk_emb,
                 "syn_spk_emb": syn_spk_emb,
                 "slice_ids": slice_ids,
+                "acc_clf_out": acc_clf_out,
             }
         )
         return outputs

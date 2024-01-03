@@ -38,6 +38,7 @@ class TextEncoder(nn.Module):
         kernel_size: int,
         dropout_p: float,
         language_emb_dim: int = None,
+        accent_emb_dim: int = None,
     ):
         """Text Encoder for VITS model.
 
@@ -61,6 +62,8 @@ class TextEncoder(nn.Module):
 
         if language_emb_dim:
             hidden_channels += language_emb_dim
+        if accent_emb_dim:
+            hidden_channels += accent_emb_dim
 
         self.encoder = RelativePositionTransformer(
             in_channels=hidden_channels,
@@ -77,7 +80,7 @@ class TextEncoder(nn.Module):
 
         self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
 
-    def forward(self, x, x_lengths, lang_emb=None):
+    def forward(self, x, x_lengths, lang_emb=None, acc_emb=None):
         """
         Shapes:
             - x: :math:`[B, T]`
@@ -89,6 +92,9 @@ class TextEncoder(nn.Module):
         # concat the lang emb in embedding chars
         if lang_emb is not None:
             x = torch.cat((x, lang_emb.transpose(2, 1).expand(x.size(0), x.size(1), -1)), dim=-1)
+        # concat the accent intensity emb in embedding chars
+        if acc_emb is not None:
+            x = torch.cat((x, acc_emb.unsqueeze(-1).transpose(2, 1).expand(x.size(0), x.size(1), -1)), dim=-1)
 
         x = torch.transpose(x, 1, -1)  # [b, h, t]
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)  # [b, 1, t]
@@ -286,3 +292,54 @@ class PosteriorEncoder(nn.Module):
         mean, log_scale = torch.split(stats, self.out_channels, dim=1)
         z = (mean + torch.randn_like(mean) * torch.exp(log_scale)) * x_mask
         return z, mean, log_scale, x_mask
+
+
+class AccentIdentifier(nn.Module):
+    def __init__(
+        self,
+        speaker_emb_dim: int,
+        hidden_channels: int,
+        num_languages: int = None,
+    ):
+        """Accent Encoder for Accent Intensity Control.
+
+        Args:
+            speaker_emb_dim (int): Dimension of speaker embedding.
+            hidden_channels (int): Number of channels for the hidden layers.
+            num_languages (int): Number of languages/accents for classification.
+        """
+        super().__init__()
+        self.speaker_emb_dim = speaker_emb_dim
+        self.hidden_channels = hidden_channels
+        self.num_languages = num_languages
+
+        self.layers = nn.Sequential(
+            nn.Linear(speaker_emb_dim, hidden_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, num_languages),
+        )
+
+    def forward(self, d_vectors):
+        return self.layers(d_vectors.squeeze(-1))
+
+
+class AccentEncoder(nn.Module):
+    def __init__(
+        self,
+        num_accents: int,
+        hidden_channels: int,
+    ):
+        super().__init__()
+        self.num_accents = num_accents
+        self.hidden_channels = hidden_channels
+        
+        self.softmax = nn.Softmax(dim=1)
+        self.enc = nn.Linear(num_accents, hidden_channels)
+    
+    def forward(self, acc_clf_out):
+        return self.enc(self.softmax(acc_clf_out))
+    
+    def inference(self, accent_intensity):
+        return self.enc(accent_intensity)

@@ -44,7 +44,7 @@ class DurationPredictor(nn.Module):
         if language_emb_dim != 0 and language_emb_dim is not None:
             self.cond_lang = nn.Conv1d(language_emb_dim, in_channels, 1)
 
-    def forward(self, x, x_mask, g=None, lang_emb=None):
+    def forward(self, x, x_mask, g=None, lang_emb=None, acc_emb=None):
         """
         Shapes:
             - x: :math:`[B, C, T]`
@@ -55,7 +55,10 @@ class DurationPredictor(nn.Module):
             x = x + self.cond(g)
 
         if lang_emb is not None:
-            x = x + self.cond_lang(lang_emb)
+            if acc_emb is not None:
+                x = x + self.cond_lang(torch.cat((lang_emb, acc_emb), dim=-1))
+            else:
+                x = x + self.cond_lang(lang_emb)
 
         x = self.conv_1(x * x_mask)
         x = torch.relu(x)
