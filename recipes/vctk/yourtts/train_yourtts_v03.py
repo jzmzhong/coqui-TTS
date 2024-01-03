@@ -287,7 +287,7 @@ config = VitsConfig(
     # Enable the weighted sampler
     use_weighted_sampler=True,
     # Ensures that all speakers are seen in the training batch equally no matter how many samples each speaker has
-    weighted_sampler_attrs={"speaker_name": 1.0},
+    weighted_sampler_attrs={"language": 1.0},
     weighted_sampler_multipliers={},
     # It defines the Speaker Consistency Loss (SCL) α to 9 like the paper
     speaker_encoder_loss_alpha=9.0,
