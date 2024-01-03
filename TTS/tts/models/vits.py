@@ -1551,7 +1551,10 @@ class Vits(BaseTTS):
         if getattr(config, "use_weighted_sampler", False):
             for attr_name, alpha in config.weighted_sampler_attrs.items():
                 print(f" > Using weighted sampler for attribute '{attr_name}' with alpha '{alpha}'")
-                multi_dict = config.weighted_sampler_multipliers.get(attr_name, None)
+                if config.weighted_sampler_multipliers:
+                    multi_dict = config.weighted_sampler_multipliers.get(attr_name, None)
+                else:
+                    multi_dict = None
                 print(multi_dict)
                 weights, attr_names, attr_weights = get_attribute_balancer_weights(
                     attr_name=attr_name, items=data_items, multi_dict=multi_dict
