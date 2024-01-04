@@ -737,7 +737,6 @@ class VitsGeneratorLoss(nn.Module):
             return_dict["loss_spk_encoder"] = loss_se
         
         if acc_clf_pred is not None:
-            import pdb; pdb.set_trace()
             loss_acc_clf = self.acc_clf_loss(acc_clf_pred, acc_clf_tar) * self.acc_clf_loss_alpha
             loss = loss + loss_acc_clf
             return_dict["loss_acc_clf"] = loss_acc_clf
