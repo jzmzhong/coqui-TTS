@@ -625,6 +625,8 @@ class VitsGeneratorLoss(nn.Module):
         self.dur_loss_alpha = c.dur_loss_alpha
         self.mel_loss_alpha = c.mel_loss_alpha
         self.spk_encoder_loss_alpha = c.speaker_encoder_loss_alpha
+        self.acc_clf_loss_alpha = c.acc_clf_loss_alpha
+        self.acc_clf_loss = torch.nn.CrossEntropyLoss()
         self.stft = TorchSTFT(
             c.audio.fft_size,
             c.audio.hop_length,
@@ -697,6 +699,8 @@ class VitsGeneratorLoss(nn.Module):
         use_speaker_encoder_as_loss=False,
         gt_spk_emb=None,
         syn_spk_emb=None,
+        acc_clf_pred=None,
+        acc_clf_tar=None,
     ):
         """
         Shapes:
@@ -731,6 +735,13 @@ class VitsGeneratorLoss(nn.Module):
             loss_se = self.cosine_similarity_loss(gt_spk_emb, syn_spk_emb) * self.spk_encoder_loss_alpha
             loss = loss + loss_se
             return_dict["loss_spk_encoder"] = loss_se
+        
+        if acc_clf_pred is not None:
+            import pdb; pdb.set_trace()
+            loss_acc_clf = self.acc_clf_loss(acc_clf_pred, acc_clf_tar) * self.acc_clf_loss_alpha
+            loss = loss + loss_acc_clf
+            return_dict["loss_acc_clf"] = loss_acc_clf
+        
         # pass losses to the dict
         return_dict["loss_gen"] = loss_gen
         return_dict["loss_kl"] = loss_kl

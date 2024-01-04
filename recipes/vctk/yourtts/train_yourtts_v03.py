@@ -197,7 +197,7 @@ model_args = VitsArgs(
     # Useful parameters to enable the Speaker Consistency Loss (SCL) described in the paper
     # use_speaker_encoder_as_loss=True,
     # Useful parameters to enable multilingual training
-    use_language_embedding=(LANG_EMB_DIM==0),
+    use_language_embedding=(LANG_EMB_DIM!=0),
     embedded_language_dim=LANG_EMB_DIM,
 )
 

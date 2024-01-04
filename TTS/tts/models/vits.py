@@ -1105,6 +1105,7 @@ class Vits(BaseTTS):
                 "syn_spk_emb": syn_spk_emb,
                 "slice_ids": slice_ids,
                 "acc_clf_out": acc_clf_out,
+                "acc_clf_tar": lid,
             }
         )
         return outputs
@@ -1354,6 +1355,8 @@ class Vits(BaseTTS):
                     use_speaker_encoder_as_loss=self.args.use_speaker_encoder_as_loss,
                     gt_spk_emb=self.model_outputs_cache["gt_spk_emb"],
                     syn_spk_emb=self.model_outputs_cache["syn_spk_emb"],
+                    acc_clf_pred=self.model_outputs_cache["acc_clf_out"],
+                    acc_clf_tar=self.model_outputs_cache["acc_clf_tar"],
                 )
 
             return self.model_outputs_cache, loss_dict

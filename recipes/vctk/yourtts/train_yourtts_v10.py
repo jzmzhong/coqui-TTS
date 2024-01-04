@@ -197,7 +197,7 @@ model_args = VitsArgs(
     # Useful parameters to enable the Speaker Consistency Loss (SCL) described in the paper
     # use_speaker_encoder_as_loss=True,
     # Useful parameters to enable multilingual training
-    use_language_embedding=(LANG_EMB_DIM==0),
+    use_language_embedding=(LANG_EMB_DIM!=0),
     embedded_language_dim=LANG_EMB_DIM,
     # accent classifier and encoder configs
     use_accent_identifier=True,
@@ -296,6 +296,9 @@ config = VitsConfig(
     weighted_sampler_multipliers={},
     # It defines the Speaker Consistency Loss (SCL) α to 9 like the paper
     speaker_encoder_loss_alpha=9.0,
+
+    # It defines the Accent Identification Loss (AIL) α
+    acc_clf_loss_alpha=10.0,
 )
 
 # Load all the datasets samples and split traning and evaluation sets

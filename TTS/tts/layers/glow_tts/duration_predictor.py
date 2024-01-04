@@ -56,7 +56,7 @@ class DurationPredictor(nn.Module):
 
         if lang_emb is not None:
             if acc_emb is not None:
-                x = x + self.cond_lang(torch.cat((lang_emb, acc_emb), dim=-1))
+                x = x + self.cond_lang(torch.cat((lang_emb, acc_emb.unsqueeze(-1)), dim=-2))
             else:
                 x = x + self.cond_lang(lang_emb)
 
