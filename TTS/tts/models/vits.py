@@ -1120,7 +1120,7 @@ class Vits(BaseTTS):
     def inference(
         self,
         x,
-        aux_input={"x_lengths": None, "d_vectors": None, "speaker_ids": None, "language_ids": None, "durations": None},
+        aux_input={"x_lengths": None, "d_vectors": None, "speaker_ids": None, "language_ids": None, "durations": None, "accent_intensity": None},
     ):  # pylint: disable=dangerous-default-value
         """
         Note:
@@ -1152,7 +1152,17 @@ class Vits(BaseTTS):
         if self.args.use_language_embedding and lid is not None:
             lang_emb = self.emb_l(lid).unsqueeze(-1)
 
-        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb)
+        # accent intensity embedding
+        acc_emb = None
+        acc_clf_out = None
+        if "accent_intensity" not in aux_input or aux_input["accent_intensity"] is None:
+            if self.accent_identifier:
+                acc_clf_out = self.accent_identifier(g)
+                acc_emb = self.accent_encoder(acc_clf_out)
+        else:
+            acc_emb = self.accent_encoder.inference(aux_input["accent_intensity"])
+        
+        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb, acc_emb=acc_emb)
 
         if durations is None:
             if self.args.use_sdp:
@@ -1163,10 +1173,15 @@ class Vits(BaseTTS):
                     reverse=True,
                     noise_scale=self.inference_noise_scale_dp,
                     lang_emb=lang_emb,
+                    acc_emb=acc_emb,
                 )
             else:
                 logw = self.duration_predictor(
-                    x, x_mask, g=g if self.args.condition_dp_on_speaker else None, lang_emb=lang_emb
+                    x,
+                    x_mask,
+                    g=g if self.args.condition_dp_on_speaker else None,
+                    lang_emb=lang_emb,
+                    acc_emb=acc_emb,
                 )
             w = torch.exp(logw) * x_mask * self.length_scale
         else:
@@ -1200,6 +1215,8 @@ class Vits(BaseTTS):
             "m_p": m_p,
             "logs_p": logs_p,
             "y_mask": y_mask,
+            "acc_clf_out": acc_clf_out,
+            "acc_clf_tar": lid,
         }
         return outputs
 

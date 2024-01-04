@@ -10,7 +10,7 @@ OUT_PATH=${DATA_DIR}/accented_TTS/10_ckpts
     --exp-name $EXP_NAME \
     --preprocessed-dataset-path $PREPROCESSED_DATASET_PATH \
     --out-path $OUT_PATH \
-    --batch-size 128 \
+    --batch-size 8 \
     --lang-emb-dim 4
 
     # --restore-path "" \
