@@ -36,7 +36,7 @@ python3 -m recipes.vctk.yourtts.train_yourtts_v03 \
     --exp-name $EXP_NAME \
     --preprocessed-dataset-path $PREPROCESSED_DATASET_PATH \
     --out-path $OUT_PATH \
-    --batch-size 128 \
+    --batch-size 96 \
     --lang-emb-dim 4
 
     # --restore-path "" \
