@@ -27,7 +27,8 @@ CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 RUN_NAME = "YourTTS-EN-VCTK"
 
 # Path where you want to save the models outputs (configs, checkpoints and tensorboard logs)
-OUT_PATH = os.path.dirname(os.path.abspath(__file__))  # "/raid/coqui/Checkpoints/original-YourTTS/"
+# OUT_PATH = os.path.dirname(os.path.abspath(__file__))  # "/raid/coqui/Checkpoints/original-YourTTS/"
+OUT_PATH = "/exports/eddie/scratch/s2526235/accented_TTS/10_ckpts"
 
 # If you want to do transfer learning and speedup your training you can set here the path to the original YourTTS model
 RESTORE_PATH = None  # "/root/.local/share/tts/tts_models--multilingual--multi-dataset--your_tts/model_file.pth"
@@ -45,15 +46,16 @@ SAMPLE_RATE = 16000
 # Max audio length in seconds to be used in training (every audio bigger than it will be ignored)
 MAX_AUDIO_LEN_IN_SECONDS = 10
 
-### Download VCTK dataset
-VCTK_DOWNLOAD_PATH = os.path.join(CURRENT_PATH, "VCTK")
-# Define the number of threads used during the audio resampling
-NUM_RESAMPLE_THREADS = 10
-# Check if VCTK dataset is not already downloaded, if not download it
-if not os.path.exists(VCTK_DOWNLOAD_PATH):
-    print(">>> Downloading VCTK dataset:")
-    download_vctk(VCTK_DOWNLOAD_PATH)
-    resample_files(VCTK_DOWNLOAD_PATH, SAMPLE_RATE, file_ext="flac", n_jobs=NUM_RESAMPLE_THREADS)
+# ### Download VCTK dataset
+# VCTK_DOWNLOAD_PATH = os.path.join(CURRENT_PATH, "VCTK")
+# # Define the number of threads used during the audio resampling
+# NUM_RESAMPLE_THREADS = 10
+# # Check if VCTK dataset is not already downloaded, if not download it
+# if not os.path.exists(VCTK_DOWNLOAD_PATH):
+#     print(">>> Downloading VCTK dataset:")
+#     download_vctk(VCTK_DOWNLOAD_PATH)
+#     resample_files(VCTK_DOWNLOAD_PATH, SAMPLE_RATE, file_ext="flac", n_jobs=NUM_RESAMPLE_THREADS)
+VCTK_DOWNLOAD_PATH = "/exports/eddie/scratch/s2526235/accented_TTS/01_preprocessed/VCTK"
 
 # init configs
 vctk_config = BaseDatasetConfig(
