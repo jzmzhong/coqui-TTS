@@ -1,7 +1,7 @@
 #!/bin/sh
 # Grid Engine options (lines prefixed with #$)
 
-#$ -N v10_acc-clf-enc
+#$ -N v11_acc-alpha100
 #$ -cwd
 #$ -l h_rt=48:00:00
 #$ -l h_vmem=512G
