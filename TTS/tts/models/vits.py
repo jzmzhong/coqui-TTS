@@ -664,6 +664,7 @@ class Vits(BaseTTS):
                 self.args.num_languages,
                 self.args.embedded_accent_dim,
             )
+            self.embedded_language_dim = 0
         else:
             self.accent_identifier = None
             self.accent_encoder = None
@@ -1041,6 +1042,7 @@ class Vits(BaseTTS):
         if self.accent_identifier:
             acc_clf_out = self.accent_identifier(g)
             acc_emb = self.accent_encoder(acc_clf_out)
+            lang_emb = None
         else:
             acc_clf_out = None
         
@@ -1159,8 +1161,10 @@ class Vits(BaseTTS):
             if self.accent_identifier:
                 acc_clf_out = self.accent_identifier(g)
                 acc_emb = self.accent_encoder(acc_clf_out)
+                lang_emb = None
         else:
             acc_emb = self.accent_encoder.inference(aux_input["accent_intensity"])
+            lang_emb = None
         
         x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb, acc_emb=acc_emb)
 
