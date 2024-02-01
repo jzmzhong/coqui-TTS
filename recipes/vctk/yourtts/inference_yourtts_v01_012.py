@@ -4,6 +4,24 @@ from TTS.api import TTS
 
 DATA_ROOT = "/Users/jeffzhong/Desktop/work/Transsion/04_AccentedTTS/accented_TTS"
 
+# MODEL2CKPTS = {
+#     "01_baseline-January-13-2024_09+03PM-2016a95": [140000],
+# }
+
+# TEST_TXT2SPK = {
+#     "p225": ["p225", "p234", "p238", "p245", "p248", "p261", "p294", "p302", "p326", "p335", "p347"],
+#     "p234": ["p234"],
+#     "p238": ["p238"],
+#     "p245": ["p245"],
+#     "p248": ["p248"],
+#     "p261": ["p261"],
+#     "p294": ["p294"],
+#     "p302": ["p302"],
+#     "p326": ["p326"],
+#     "p335": ["p335"],
+#     "p347": ["p347"],
+# }
+
 MODEL2CKPTS = {
     "012_baseline_4acc-January-16-2024_12+10AM-281896a": [140000],
 }

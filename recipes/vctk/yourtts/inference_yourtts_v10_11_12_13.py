@@ -5,7 +5,10 @@ from TTS.api import TTS
 DATA_ROOT = "/Users/jeffzhong/Desktop/work/Transsion/04_AccentedTTS/accented_TTS"
 
 MODEL2CKPTS = {
-    "10_acc-clf-enc-January-13-2024_10+38PM-2016a95": [140000],
+    # "10_acc-clf-enc-January-13-2024_10+38PM-2016a95": [140000],
+    "11_acc-alpha100-January-30-2024_04+42PM-6801829": [135000],
+    "12_acc-alpha1000-January-30-2024_04+44PM-6801829": [135000],
+    "13_acc-alpha10000-January-30-2024_04+47PM-6801829": [135000],
 }
 
 TEST_TXT2SPK = {
@@ -17,9 +20,9 @@ TEST_TXT2SPK = {
              ("p245", "Irish"),
              ("p294", "American"),
     ],
-    # "p234": [("p234", "Scottish"),],
-    # "p245": [("p245", "Irish")],
-    # "p294": [("p294", "American")],
+    "p234": [("p234", "Scottish"),],
+    "p245": [("p245", "Irish")],
+    "p294": [("p294", "American")],
 }
 
 for MODEL_NAME, CKPTS in MODEL2CKPTS.items():
@@ -28,7 +31,8 @@ for MODEL_NAME, CKPTS in MODEL2CKPTS.items():
         for TXT, SPKS in TEST_TXT2SPK.items():
             TEST_TXT_DIR = os.path.join(DATA_ROOT, "01_preprocessed/VCTK/txt/", TXT)
             for (SPK, ACC) in SPKS:
-                REFERENCE_WAV = os.path.join(DATA_ROOT, "01_preprocessed/VCTK/wav48_silence_trimmed", SPK, SPK+"_001_mic1.flac") 
+                REFERENCE_WAV = os.path.join(DATA_ROOT, "01_preprocessed/VCTK/wav48_silence_trimmed", SPK, SPK+"_002_mic1.flac") 
+                # OUTPUT_WAV_FOLDER = os.path.join(MODEL_DIR, "text_{}_speaker_{}_accent_{}_intensity_ref_checkpoint_{}".format(TXT, SPK, ACC, CKPT))
                 OUTPUT_WAV_FOLDER = os.path.join(MODEL_DIR, "debug_text_{}_speaker_{}_accent_{}_intensity_ref_checkpoint_{}".format(TXT, SPK, ACC, CKPT))
 
                 os.makedirs(OUTPUT_WAV_FOLDER, exist_ok=True)
