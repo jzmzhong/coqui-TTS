@@ -225,12 +225,12 @@ class TTS(nn.Module):
         # check for the coqui tts models
         if self.is_multi_speaker and (speaker is None and speaker_wav is None):
             raise ValueError("Model is multi-speaker but no `speaker` is provided.")
-        if self.is_multi_lingual and language is None:
-            raise ValueError("Model is multi-lingual but no `language` is provided.")
+        # if self.is_multi_lingual and language is None:
+        #     raise ValueError("Model is multi-lingual but no `language` is provided.")
         if not self.is_multi_speaker and speaker is not None and "voice_dir" not in kwargs:
             raise ValueError("Model is not multi-speaker but `speaker` is provided.")
-        if not self.is_multi_lingual and language is not None:
-            raise ValueError("Model is not multi-lingual but `language` is provided.")
+        # if not self.is_multi_lingual and language is not None:
+        #     raise ValueError("Model is not multi-lingual but `language` is provided.")
         if not emotion is None and not speed is None:
             raise ValueError("Emotion and speed can only be used with Coqui Studio models. Which is discontinued.")
 
@@ -238,8 +238,10 @@ class TTS(nn.Module):
         self,
         text: str,
         speaker: str = None,
+        speaker_accent: str = None,
         language: str = None,
         speaker_wav: str = None,
+        accent_wav: str = None,
         emotion: str = None,
         speed: float = None,
         split_sentences: bool = True,
@@ -276,8 +278,10 @@ class TTS(nn.Module):
         wav = self.synthesizer.tts(
             text=text,
             speaker_name=speaker,
+            speaker_name_accent=speaker_accent,
             language_name=language,
             speaker_wav=speaker_wav,
+            accent_wav=accent_wav,
             reference_wav=None,
             style_wav=None,
             style_text=None,

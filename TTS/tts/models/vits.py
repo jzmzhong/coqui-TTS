@@ -29,6 +29,7 @@ from TTS.tts.utils.fairseq import rehash_fairseq_vits_checkpoint
 from TTS.tts.utils.helpers import generate_path, maximum_path, rand_segments, segment, sequence_mask
 from TTS.tts.utils.languages import LanguageManager
 from TTS.tts.utils.speakers import SpeakerManager
+from TTS.tts.utils.accents import AccentManager
 from TTS.tts.utils.synthesis import synthesis
 from TTS.tts.utils.text.characters import BaseCharacters, BaseVocabulary, _characters, _pad, _phonemes, _punctuations
 from TTS.tts.utils.text.tokenizer import TTSTokenizer
@@ -486,6 +487,27 @@ class VitsArgs(Coqpit):
         d_vector_dim (int):
             Number of d-vector channels. Defaults to 0.
 
+        use_accent_embedding (bool):
+            Enable/Disable speaker embedding for multi-accent models. Defaults to False.
+
+        num_accents (int):
+            Number of accents for the accent embedding layer. Defaults to 0.
+
+        accents_file (str):
+            Path to the accent mapping file for the Accent Manager. Defaults to None.
+
+        accent_embedding_channels (int):
+            Number of accent embedding channels. Defaults to 256.
+
+        use_d_vector_accent_file (bool):
+            Enable/Disable the use of d-vectors (accent embedding) for multi-accent training. Defaults to False.
+
+        d_vector_accent_file (List[str]):
+            List of paths to the files including pre-computed accent embeddings. Defaults to None.
+
+        d_vector_accent_dim (int):
+            Number of d-vector (accent embedding) channels. Defaults to 0.
+
         detach_dp_input (bool):
             Detach duration predictor's input from the network for stopping the gradients. Defaults to True.
 
@@ -573,13 +595,26 @@ class VitsArgs(Coqpit):
     max_inference_len: int = None
     init_discriminator: bool = True
     use_spectral_norm_disriminator: bool = False
+    
+    # speaker id
     use_speaker_embedding: bool = False
     num_speakers: int = 0
     speakers_file: str = None
-    d_vector_file: List[str] = None
     speaker_embedding_channels: int = 256
+    # speaker embedding
+    d_vector_file: List[str] = None
     use_d_vector_file: bool = False
     d_vector_dim: int = 0
+    # accent id
+    use_accent_embedding: bool = False
+    num_accents: int = 0
+    accents_file: str = None
+    accent_embedding_channels: int = 256
+    # accent embedding
+    d_vector_accent_file: List[str] = None
+    use_d_vector_accent_file: bool = False
+    d_vector_accent_dim: int = 0
+
     detach_dp_input: bool = True
     use_language_embedding: bool = False
     embedded_language_dim: int = 4
@@ -634,11 +669,13 @@ class Vits(BaseTTS):
         ap: "AudioProcessor" = None,
         tokenizer: "TTSTokenizer" = None,
         speaker_manager: SpeakerManager = None,
+        accent_manager: AccentManager = None,
         language_manager: LanguageManager = None,
     ):
-        super().__init__(config, ap, tokenizer, speaker_manager, language_manager)
+        super().__init__(config, ap, tokenizer, speaker_manager, accent_manager, language_manager)
 
         self.init_multispeaker(config)
+        self.init_multiaccent(config)
         self.init_multilingual(config)
         self.init_upsampling()
 
@@ -659,6 +696,7 @@ class Vits(BaseTTS):
             self.args.num_layers_text_encoder,
             self.args.kernel_size_text_encoder,
             self.args.dropout_p_text_encoder,
+            accent_emb_dim=self.embedded_accent_dim,
             language_emb_dim=self.embedded_language_dim,
         )
 
@@ -689,6 +727,7 @@ class Vits(BaseTTS):
                 self.args.dropout_p_duration_predictor,
                 4,
                 cond_channels=self.embedded_speaker_dim if self.args.condition_dp_on_speaker else 0,
+                accent_emb_dim=self.embedded_accent_dim,
                 language_emb_dim=self.embedded_language_dim,
             )
         else:
@@ -698,6 +737,7 @@ class Vits(BaseTTS):
                 3,
                 self.args.dropout_p_duration_predictor,
                 cond_channels=self.embedded_speaker_dim,
+                accent_emb_dim=self.embedded_accent_dim,
                 language_emb_dim=self.embedded_language_dim,
             )
 
@@ -784,6 +824,43 @@ class Vits(BaseTTS):
             raise ValueError("[!] Speaker embedding layer already initialized before d_vector settings.")
         self.embedded_speaker_dim = self.args.d_vector_dim
 
+    def init_multiaccent(self, config: Coqpit):
+        """Initialize multi-accent modules of a model. A model can be trained either with an accent embedding layer
+        or with external `d_vectors_accent` computed from an accent encoder model.
+
+        You must provide an `accent_manager` at initialization to set up the multi-accent modules.
+
+        Args:
+            config (Coqpit): Model configuration.
+            data (List, optional): Dataset items to infer number of speakers. Defaults to None.
+        """
+        self.embedded_accent_dim = 0
+        self.audio_transform = None
+
+        # discrete - number of accents, continous - number of speakers?
+        if self.accent_manager:
+            self.num_accents = self.accent_manager.num_accents
+
+        if self.args.use_accent_embedding:
+            self._init_accent_embedding()
+
+        if self.args.use_d_vector_accent_file:
+            self._init_d_vector_accent()
+
+    def _init_accent_embedding(self):
+        # pylint: disable=attribute-defined-outside-init
+        if self.num_speakers > 0:
+            print(" > initialization of speaker-embedding layers.")
+            self.embedded_accent_dim = self.args.accent_embedding_channels
+            self.emb_a = nn.Embedding(self.num_accents, self.embedded_accent_dim)
+            torch.nn.init.xavier_uniform_(self.emb_a.weight)
+
+    def _init_d_vector_accent(self):
+        # pylint: disable=attribute-defined-outside-init
+        if hasattr(self, "emb_a"):
+            raise ValueError("[!] Accent embedding layer already initialized before d_vector settings.")
+        self.embedded_accent_dim = self.args.d_vector_accent_dim # TO-FIX
+
     def init_multilingual(self, config: Coqpit):
         """Initialize multilingual modules of a model.
 
@@ -842,13 +919,22 @@ class Vits(BaseTTS):
             print(" > Text Encoder was reinit.")
 
     def get_aux_input(self, aux_input: Dict):
-        sid, g, lid, _ = self._set_cond_input(aux_input)
-        return {"speaker_ids": sid, "style_wav": None, "d_vectors": g, "language_ids": lid}
+        sid, g, aid, a, lid, _ = self._set_cond_input(aux_input)
+        return {
+            "style_wav": None,
+            "speaker_ids": sid, "d_vectors": g,
+            "accent_ids": aid, "d_vectors_accent": a,
+            "language_ids": lid
+            }
 
     def _freeze_layers(self):
         if self.args.freeze_encoder:
             for param in self.text_encoder.parameters():
                 param.requires_grad = False
+
+            if hasattr(self, "emb_a"):
+                for param in self.emb_a.parameters():
+                    param.requires_grad = False
 
             if hasattr(self, "emb_l"):
                 for param in self.emb_l.parameters():
@@ -873,7 +959,7 @@ class Vits(BaseTTS):
     @staticmethod
     def _set_cond_input(aux_input: Dict):
         """Set the speaker conditioning input based on the multi-speaker mode."""
-        sid, g, lid, durations = None, None, None, None
+        sid, g, aid, a, lid, durations = None, None, None, None, None, None
         if "speaker_ids" in aux_input and aux_input["speaker_ids"] is not None:
             sid = aux_input["speaker_ids"]
             if sid.ndim == 0:
@@ -882,6 +968,15 @@ class Vits(BaseTTS):
             g = F.normalize(aux_input["d_vectors"]).unsqueeze(-1)
             if g.ndim == 2:
                 g = g.unsqueeze_(0)
+        
+        if "accent_ids" in aux_input and aux_input["accent_ids"] is not None:
+            aid = aux_input["accent_ids"]
+            if aid.ndim == 0:
+                aid = aid.unsqueeze_(0)
+        if "d_vectors_accent" in aux_input and aux_input["d_vectors_accent"] is not None:
+            a = F.normalize(aux_input["d_vectors_accent"]).unsqueeze(-1)
+            if a.ndim == 2:
+                a = g.unsqueeze_(0)
 
         if "language_ids" in aux_input and aux_input["language_ids"] is not None:
             lid = aux_input["language_ids"]
@@ -891,7 +986,7 @@ class Vits(BaseTTS):
         if "durations" in aux_input and aux_input["durations"] is not None:
             durations = aux_input["durations"]
 
-        return sid, g, lid, durations
+        return sid, g, aid, a, lid, durations
 
     def _set_speaker_input(self, aux_input: Dict):
         d_vectors = aux_input.get("d_vectors", None)
@@ -906,7 +1001,7 @@ class Vits(BaseTTS):
         g = speaker_ids if speaker_ids is not None else d_vectors
         return g
 
-    def forward_mas(self, outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g, lang_emb):
+    def forward_mas(self, outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g, acc_emb, lang_emb):
         # find the alignment path
         attn_mask = torch.unsqueeze(x_mask, -1) * torch.unsqueeze(y_mask, 2)
         with torch.no_grad():
@@ -926,6 +1021,7 @@ class Vits(BaseTTS):
                 x_mask,
                 attn_durations,
                 g=g.detach() if self.args.detach_dp_input and g is not None else g,
+                acc_emb=acc_emb.detach() if self.args.detach_dp_input and acc_emb is not None else acc_emb,
                 lang_emb=lang_emb.detach() if self.args.detach_dp_input and lang_emb is not None else lang_emb,
             )
             loss_duration = loss_duration / torch.sum(x_mask)
@@ -935,6 +1031,7 @@ class Vits(BaseTTS):
                 x.detach() if self.args.detach_dp_input else x,
                 x_mask,
                 g=g.detach() if self.args.detach_dp_input and g is not None else g,
+                acc_emb=acc_emb.detach() if self.args.detach_dp_input and acc_emb is not None else acc_emb,
                 lang_emb=lang_emb.detach() if self.args.detach_dp_input and lang_emb is not None else lang_emb,
             )
             loss_duration = torch.sum((log_durations - attn_log_durations) ** 2, [1, 2]) / torch.sum(x_mask)
@@ -965,7 +1062,7 @@ class Vits(BaseTTS):
         y: torch.tensor,
         y_lengths: torch.tensor,
         waveform: torch.tensor,
-        aux_input={"d_vectors": None, "speaker_ids": None, "language_ids": None},
+        aux_input={"d_vectors": None, "speaker_ids": None, "d_vectors_accent": None, "accent_ids": None, "language_ids": None},
     ) -> Dict:
         """Forward pass of the model.
 
@@ -975,8 +1072,8 @@ class Vits(BaseTTS):
             y (torch.tensor): Batch of input spectrograms.
             y_lengths (torch.tensor): Batch of input spectrogram lengths.
             waveform (torch.tensor): Batch of ground truth waveforms per sample.
-            aux_input (dict, optional): Auxiliary inputs for multi-speaker and multi-lingual training.
-                Defaults to {"d_vectors": None, "speaker_ids": None, "language_ids": None}.
+            aux_input (dict, optional): Auxiliary inputs for multi-speaker, multi-accent, and multi-lingual training.
+                Defaults to {"d_vectors": None, "speaker_ids": None, "d_vectors_accent": None, "accent_ids": None, "language_ids": None}.
 
         Returns:
             Dict: model outputs keyed by the output name.
@@ -1005,26 +1102,30 @@ class Vits(BaseTTS):
             - syn_spk_emb: :math:`[B, 1, speaker_encoder.proj_dim]`
         """
         outputs = {}
-        sid, g, lid, _ = self._set_cond_input(aux_input)
+        sid, g, aid, acc_emb, lid, _ = self._set_cond_input(aux_input)
         # speaker embedding
         if self.args.use_speaker_embedding and sid is not None:
             g = self.emb_g(sid).unsqueeze(-1)  # [b, h, 1]
+
+        # accent embedding
+        if self.args.use_accent_embedding and aid is not None:
+            acc_emb = self.emb_a(aid).unsqueeze(-1)
 
         # language embedding
         lang_emb = None
         if self.args.use_language_embedding and lid is not None:
             lang_emb = self.emb_l(lid).unsqueeze(-1)
 
-        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb)
+        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, acc_emb=acc_emb, lang_emb=lang_emb)
 
         # posterior encoder
-        z, m_q, logs_q, y_mask = self.posterior_encoder(y, y_lengths, g=g)
+        z, m_q, logs_q, y_mask = self.posterior_encoder(y, y_lengths, g=g) # to include acc embedding or not?
 
         # flow layers
-        z_p = self.flow(z, y_mask, g=g)
+        z_p = self.flow(z, y_mask, g=g) # to include acc embedding or not?
 
         # duration predictor
-        outputs, attn = self.forward_mas(outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g=g, lang_emb=lang_emb)
+        outputs, attn = self.forward_mas(outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g=g, acc_emb=acc_emb, lang_emb=lang_emb)
 
         # expand prior
         m_p = torch.einsum("klmn, kjm -> kjn", [attn, m_p])
@@ -1109,19 +1210,24 @@ class Vits(BaseTTS):
             - m_p: :math:`[B, C, T_dec]`
             - logs_p: :math:`[B, C, T_dec]`
         """
-        sid, g, lid, durations = self._set_cond_input(aux_input)
+        sid, g, aid, acc_emb, lid, durations = self._set_cond_input(aux_input)
+
         x_lengths = self._set_x_lengths(x, aux_input)
 
         # speaker embedding
         if self.args.use_speaker_embedding and sid is not None:
             g = self.emb_g(sid).unsqueeze(-1)
 
+        # accent embedding
+        if self.args.use_accent_embedding and aid is not None:
+            acc_emb = self.emb_a(aid).unsqueeze(-1)
+
         # language embedding
         lang_emb = None
         if self.args.use_language_embedding and lid is not None:
             lang_emb = self.emb_l(lid).unsqueeze(-1)
 
-        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb)
+        x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, acc_emb=acc_emb, lang_emb=lang_emb)
 
         if durations is None:
             if self.args.use_sdp:
@@ -1131,11 +1237,12 @@ class Vits(BaseTTS):
                     g=g if self.args.condition_dp_on_speaker else None,
                     reverse=True,
                     noise_scale=self.inference_noise_scale_dp,
+                    acc_emb=acc_emb,
                     lang_emb=lang_emb,
                 )
             else:
                 logw = self.duration_predictor(
-                    x, x_mask, g=g if self.args.condition_dp_on_speaker else None, lang_emb=lang_emb
+                    x, x_mask, g=g if self.args.condition_dp_on_speaker else None, acc_emb=acc_emb, lang_emb=lang_emb
                 )
             w = torch.exp(logw) * x_mask * self.length_scale
         else:
@@ -1248,6 +1355,8 @@ class Vits(BaseTTS):
 
             d_vectors = batch["d_vectors"]
             speaker_ids = batch["speaker_ids"]
+            d_vectors_accent = batch["d_vectors_accent"]
+            accent_ids = batch["accent_ids"]
             language_ids = batch["language_ids"]
             waveform = batch["waveform"]
 
@@ -1258,7 +1367,10 @@ class Vits(BaseTTS):
                 spec,
                 spec_lens,
                 waveform,
-                aux_input={"d_vectors": d_vectors, "speaker_ids": speaker_ids, "language_ids": language_ids},
+                aux_input={
+                    "d_vectors": d_vectors, "speaker_ids": speaker_ids, 
+                    "d_vectors_accent": d_vectors_accent, "accent_ids": accent_ids, 
+                    "language_ids": language_ids},
             )
 
             # cache tensors for the generator pass
@@ -1397,8 +1509,8 @@ class Vits(BaseTTS):
         else:
             text = sentence_info
 
-        # get speaker  id/d_vector
-        speaker_id, d_vector, language_id = None, None, None
+        # get speaker id/d_vector
+        speaker_id, d_vector, accent_id, d_vector_accent, language_id = None, None, None
         if hasattr(self, "speaker_manager"):
             if config.use_d_vector_file:
                 if speaker_name is None:
@@ -1410,6 +1522,20 @@ class Vits(BaseTTS):
                     speaker_id = self.speaker_manager.get_random_id()
                 else:
                     speaker_id = self.speaker_manager.name_to_id[speaker_name]
+        
+        # get accent id/d_vector_accent
+        if hasattr(self, "accent_manager"):
+            if config.use_d_vector_accent_file:
+                if speaker_name is None:
+                    d_vector_accent = self.accent_manager.get_random_embedding()
+                else:
+                    # not sure if this will work
+                    d_vector_accent = self.accent_manager.get_mean_embedding(speaker_name, num_samples=None, randomize=False)
+            elif config.use_accent_embedding:
+                if accent_name is None:
+                    accent_id = self.accent_manager.get_random_id()
+                else:
+                    accent_id = self.accent_manager.name_to_id[accent_name]
 
         # get language id
         if hasattr(self, "language_manager") and config.use_language_embedding and language_name is not None:
@@ -1420,6 +1546,8 @@ class Vits(BaseTTS):
             "speaker_id": speaker_id,
             "style_wav": style_wav,
             "d_vector": d_vector,
+            "accent_id": accent_id,
+            "d_vector_accent": d_vector_accent,
             "language_id": language_id,
             "language_name": language_name,
         }
@@ -1466,6 +1594,8 @@ class Vits(BaseTTS):
         speaker_ids = None
         language_ids = None
         d_vectors = None
+        accent_ids = None
+        d_vectors_accent = None
 
         # get numerical speaker ids from speaker names
         if self.speaker_manager is not None and self.speaker_manager.name_to_id and self.args.use_speaker_embedding:
@@ -1480,6 +1610,19 @@ class Vits(BaseTTS):
             d_vectors = [d_vector_mapping[w]["embedding"] for w in batch["audio_unique_names"]]
             d_vectors = torch.FloatTensor(d_vectors)
 
+       # get numerical accent ids from accent names
+        if self.accent_manager is not None and self.accent_manager.name_to_id and self.args.use_accent_embedding:
+            accent_ids = [self.accent_manager.name_to_id[an] for an in batch["accent_names"]]
+
+        if accent_ids is not None:
+            accent_ids = torch.LongTensor(accent_ids)
+
+        # get d_vectors_accent from audio file names
+        if self.accent_manager is not None and self.accent_manager.embeddings and self.args.use_d_vector_accent_file:
+            d_vector_accent_mapping = self.accent_manager.embeddings
+            d_vectors_accent = [d_vector_accent_mapping[w]["embedding"] for w in batch["audio_unique_names"]]
+            d_vectors_accent = torch.FloatTensor(d_vectors_accent)
+
         # get language ids from language names
         if self.language_manager is not None and self.language_manager.name_to_id and self.args.use_language_embedding:
             language_ids = [self.language_manager.name_to_id[ln] for ln in batch["language_names"]]
@@ -1490,6 +1633,9 @@ class Vits(BaseTTS):
         batch["language_ids"] = language_ids
         batch["d_vectors"] = d_vectors
         batch["speaker_ids"] = speaker_ids
+        batch["d_vectors_accent"] = d_vectors_accent
+        batch["accent_ids"] = accent_ids
+        
         return batch
 
     def format_batch_on_device(self, batch):
@@ -1798,13 +1944,19 @@ class Vits(BaseTTS):
         ap = AudioProcessor.init_from_config(config, verbose=verbose)
         tokenizer, new_config = TTSTokenizer.init_from_config(config)
         speaker_manager = SpeakerManager.init_from_config(config, samples)
+        accent_manager = AccentManager.init_from_config(config, samples)
         language_manager = LanguageManager.init_from_config(config)
 
         if config.model_args.speaker_encoder_model_path:
             speaker_manager.init_encoder(
                 config.model_args.speaker_encoder_model_path, config.model_args.speaker_encoder_config_path
             )
-        return Vits(new_config, ap, tokenizer, speaker_manager, language_manager)
+        # TO-FIX
+        # if config.model_args.accent_encoder:
+        #     accent_maanger.init_encoder(
+        #         config.model_args.accent_encoder_model_path, config.model_args.accent_encoder_config_path
+        #     )
+        return Vits(new_config, ap, tokenizer, speaker_manager, accent_manager, language_manager)
 
     def export_onnx(self, output_path: str = "coqui_vits.onnx", verbose: bool = True):
         """Export model to ONNX format for inference

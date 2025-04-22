@@ -258,8 +258,10 @@ class Synthesizer(nn.Module):
         self,
         text: str = "",
         speaker_name: str = "",
+        speaker_name_accent: str = "",
         language_name: str = "",
         speaker_wav=None,
+        accent_wav=None,
         style_wav=None,
         style_text=None,
         reference_wav=None,
@@ -332,6 +334,38 @@ class Synthesizer(nn.Module):
                     "Define path for speaker.json if it is a multi-speaker model or remove defined speaker idx. "
                 )
 
+        # handle multi-accent
+        accent_embedding = None
+        accent_id = None
+        if self.tts_speakers_file or hasattr(self.tts_model.accent_manager, "name_to_id"):
+            if speaker_name_accent and isinstance(speaker_name_accent, str) and not self.tts_config.model == "xtts":
+                if self.tts_config.use_d_vector_accent_file:
+                    # get the average accent embedding from the saved d_vectors_accent.
+                    accent_embedding = self.tts_model.accent_manager.get_mean_embedding(
+                        speaker_name_accent, num_samples=None, randomize=False
+                    )
+                    accent_embedding = np.array(accent_embedding)[None, :]  # [1 x embedding_dim]
+                else:
+                    # get speaker idx from the speaker name
+                    accent_id = self.tts_model.accent_manager.name_to_id[speaker_name_accent] # TO-FIX
+            # handle Neon models with single speaker.
+            elif len(self.tts_model.accent_manager.name_to_id) == 1:
+                accent_id = list(self.tts_model.accent_manager.name_to_id.values())[0]
+            elif not speaker_name_accent and not accent_wav:
+                raise ValueError(
+                    " [!] Looks like you are using a multi-accent model. "
+                    "You need to define either a `accent_idx` or a `accent_wav` to use a multi-accent model."
+                )
+            else:
+                accent_embedding = None
+        else:
+            pass
+            # if speaker_name and self.voice_dir is None:
+            #     raise ValueError(
+            #         f" [!] Missing speakers.json file path for selecting speaker {speaker_name}."
+            #         "Define path for speakers.json if it is a multi-speaker model or remove defined speaker idx. "
+            #     )
+
         # handle multi-lingual
         language_id = None
         if self.tts_languages_file or (
@@ -372,7 +406,17 @@ class Synthesizer(nn.Module):
             and self.tts_model.speaker_manager.encoder_ap is not None
         ):
             speaker_embedding = self.tts_model.speaker_manager.compute_embedding_from_clip(speaker_wav)
-
+            
+            # extract accent embedding
+            if self.tts_model.accent_manager is not None:
+                if accent_wav is None:
+                    # idx = "vctk#vctk#" + "/".join(".".join(speaker_wav.split(".")[:-1]).split("/")[-3:])
+                    idx = "vctk#" + "/".join(".".join(speaker_wav.split(".")[:-1]).split("/")[-3:]) # v2.2, v3.1
+                    accent_embedding = self.tts_model.accent_manager.get_embedding_by_clip(idx)
+                else:
+                    idx = "vctk#" + "/".join(".".join(accent_wav.split(".")[:-1]).split("/")[-3:]) # v2.2, v3.1
+                    accent_embedding = self.tts_model.accent_manager.get_embedding_by_clip(idx)
+            
         vocoder_device = "cpu"
         use_gl = self.vocoder_model is None
         if not use_gl:
@@ -389,6 +433,7 @@ class Synthesizer(nn.Module):
                         speaker_id=speaker_name,
                         voice_dirs=self.voice_dir,
                         d_vector=speaker_embedding,
+                        d_vector_accent=accent_embedding,
                         speaker_wav=speaker_wav,
                         language=language_name,
                         **kwargs,
@@ -405,6 +450,7 @@ class Synthesizer(nn.Module):
                         style_text=style_text,
                         use_griffin_lim=use_gl,
                         d_vector=speaker_embedding,
+                        d_vector_accent=accent_embedding,
                         language_id=language_id,
                     )
                 waveform = outputs["wav"]

@@ -1,0 +1,4 @@
+#!/bin/sh
+conda init
+conda activate coquitts_py310torch23cu121
+python -m recipes.vctk.accentbox.train_yourtts_base > exp/yourtts_base_librittsr_2.out 2> exp/yourtts_base_librittsr_2.err

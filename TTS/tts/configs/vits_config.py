@@ -170,6 +170,11 @@ class VitsConfig(BaseTTSConfig):
     d_vector_file: List[str] = None
     d_vector_dim: int = None
 
+    # use d-vector (for accent embedding)
+    use_d_vector_accent_file: bool = False
+    d_vector_accent_file: List[str] = None
+    d_vector_accent_dim: int = None
+
     def __post_init__(self):
         for key, val in self.model_args.items():
             if hasattr(self, key):

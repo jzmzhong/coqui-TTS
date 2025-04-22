@@ -343,6 +343,10 @@ def libri_tts(root_path, meta_files=None, ignored_speakers=None):
                 if isinstance(ignored_speakers, list):
                     if speaker_name in ignored_speakers:
                         continue
+                # skip missing wav
+                if not os.path.exists(wav_file):
+                    print("Skipping:", wav_file)
+                    continue
                 items.append(
                     {
                         "text": text,

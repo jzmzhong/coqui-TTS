@@ -31,6 +31,7 @@ def run_model_torch(
     style_mel: torch.Tensor = None,
     style_text: str = None,
     d_vector: torch.Tensor = None,
+    d_vector_accent: torch.Tensor = None,
     language_id: torch.Tensor = None,
 ) -> Dict:
     """Run a torch model for inference. It does not support batch inference.
@@ -41,6 +42,7 @@ def run_model_torch(
         speaker_id (int, optional): Input speaker ids for multi-speaker models. Defaults to None.
         style_mel (torch.Tensor, optional): Spectrograms used for voice styling . Defaults to None.
         d_vector (torch.Tensor, optional): d-vector for multi-speaker models    . Defaults to None.
+        d_vector_accent (torch.Tensor, optional): d-vector (accent) for multi-accent models    . Defaults to None.
 
     Returns:
         Dict: model outputs.
@@ -56,6 +58,7 @@ def run_model_torch(
             "x_lengths": input_lengths,
             "speaker_ids": speaker_id,
             "d_vectors": d_vector,
+            "d_vectors_accent": d_vector_accent,
             "style_mel": style_mel,
             "style_text": style_text,
             "language_ids": language_id,
@@ -124,6 +127,7 @@ def synthesis(
     use_griffin_lim=False,
     do_trim_silence=False,
     d_vector=None,
+    d_vector_accent=None,
     language_id=None,
 ):
     """Synthesize voice for the given text using Griffin-Lim vocoder or just compute output features to be passed to
@@ -161,6 +165,9 @@ def synthesis(
 
         d_vector (torch.Tensor):
             d-vector for multi-speaker models in share :math:`[1, D]`. Defaults to None.
+
+        d_vector_accent (torch.Tensor):
+            d-vector (accent) for multi-accent models in share :math:`[1, D]`. Defaults to None.
 
         language_id (int):
             Language ID passed to the language embedding layer in multi-langual model. Defaults to None.
@@ -201,6 +208,9 @@ def synthesis(
     if d_vector is not None:
         d_vector = embedding_to_torch(d_vector, device=device)
 
+    if d_vector_accent is not None:
+        d_vector_accent = embedding_to_torch(d_vector_accent, device=device)
+
     if language_id is not None:
         language_id = id_to_torch(language_id, device=device)
 
@@ -225,6 +235,7 @@ def synthesis(
         style_mel,
         style_text,
         d_vector=d_vector,
+        d_vector_accent=d_vector_accent,
         language_id=language_id,
     )
     model_outputs = outputs["model_outputs"]

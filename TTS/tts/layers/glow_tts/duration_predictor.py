@@ -18,8 +18,12 @@ class DurationPredictor(nn.Module):
         dropout_p (float): Dropout rate used after each conv layer.
     """
 
-    def __init__(self, in_channels, hidden_channels, kernel_size, dropout_p, cond_channels=None, language_emb_dim=None):
+    def __init__(self, in_channels, hidden_channels, kernel_size, dropout_p, cond_channels=None, accent_emb_dim=None, language_emb_dim=None):
         super().__init__()
+
+        # # add language embedding dim in the input
+        # if accent_emb_dim:
+        #     in_channels += accent_emb_dim
 
         # add language embedding dim in the input
         if language_emb_dim:
@@ -41,10 +45,13 @@ class DurationPredictor(nn.Module):
         if cond_channels is not None and cond_channels != 0:
             self.cond = nn.Conv1d(cond_channels, in_channels, 1)
 
+        if accent_emb_dim != 0 and accent_emb_dim is not None:
+            self.cond_acc = nn.Conv1d(accent_emb_dim, in_channels, 1)
+
         if language_emb_dim != 0 and language_emb_dim is not None:
             self.cond_lang = nn.Conv1d(language_emb_dim, in_channels, 1)
 
-    def forward(self, x, x_mask, g=None, lang_emb=None):
+    def forward(self, x, x_mask, g=None, acc_emb=None, lang_emb=None):
         """
         Shapes:
             - x: :math:`[B, C, T]`
@@ -53,6 +60,9 @@ class DurationPredictor(nn.Module):
         """
         if g is not None:
             x = x + self.cond(g)
+
+        if acc_emb is not None:
+            x = x + self.cond_acc(acc_emb)
 
         if lang_emb is not None:
             x = x + self.cond_lang(lang_emb)

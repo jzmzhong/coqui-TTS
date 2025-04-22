@@ -15,6 +15,7 @@ from TTS.tts.datasets.dataset import TTSDataset
 from TTS.tts.utils.data import get_length_balancer_weights
 from TTS.tts.utils.languages import LanguageManager, get_language_balancer_weights
 from TTS.tts.utils.speakers import SpeakerManager, get_speaker_balancer_weights, get_speaker_manager
+from TTS.tts.utils.accents import AccentManager
 from TTS.tts.utils.synthesis import synthesis
 from TTS.tts.utils.visual import plot_alignment, plot_spectrogram
 
@@ -35,6 +36,7 @@ class BaseTTS(BaseTrainerModel):
         ap: "AudioProcessor",
         tokenizer: "TTSTokenizer",
         speaker_manager: SpeakerManager = None,
+        accent_manager: AccentManager = None,
         language_manager: LanguageManager = None,
     ):
         super().__init__()
@@ -42,6 +44,7 @@ class BaseTTS(BaseTrainerModel):
         self.ap = ap
         self.tokenizer = tokenizer
         self.speaker_manager = speaker_manager
+        self.accent_manager = accent_manager
         self.language_manager = language_manager
         self._set_model_args(config)
 
@@ -134,7 +137,7 @@ class BaseTTS(BaseTrainerModel):
         else:
             text = sentence_info
 
-        # get speaker  id/d_vector
+        # get speaker id/d_vector
         speaker_id, d_vector, language_id = None, None, None
         if self.speaker_manager is not None:
             if config.use_d_vector_file:
@@ -147,6 +150,20 @@ class BaseTTS(BaseTrainerModel):
                     speaker_id = self.speaker_manager.get_random_id()
                 else:
                     speaker_id = self.speaker_manager.name_to_id[speaker_name]
+
+        # get accent id/d_vector
+        accent_id, d_vector_accent = None, None
+        if self.accent_manager is not None:
+            if config.use_d_vector_accent_file:
+                if speaker_name is None:
+                    d_vector_accent = self.accent_manager.get_random_embedding()
+                else:
+                    d_vector_accent = self.accent_manager.get_d_vector_by_name(speaker_name)
+            elif config.use_accent_embedding:
+                if speaker_name is None:
+                    accent_id = self.accent_manager.get_random_id()
+                else:
+                    accent_id = self.accent_manager.name_to_id[speaker_name]
 
         # get language id
         if self.language_manager is not None and config.use_language_embedding and language_name is not None:
@@ -418,7 +435,7 @@ class BaseTTS(BaseTrainerModel):
         return test_figures, test_audios
 
     def on_init_start(self, trainer):
-        """Save the speaker.pth and language_ids.json at the beginning of the training. Also update both paths."""
+        """Save the speakers.pth, accents.pth, and language_ids.json at the beginning of the training. Also update both paths."""
         if self.speaker_manager is not None:
             output_path = os.path.join(trainer.output_path, "speakers.pth")
             self.speaker_manager.save_ids_to_file(output_path)
@@ -429,6 +446,17 @@ class BaseTTS(BaseTrainerModel):
             trainer.config.save_json(os.path.join(trainer.output_path, "config.json"))
             print(f" > `speakers.pth` is saved to {output_path}.")
             print(" > `speakers_file` is updated in the config.json.")
+
+        if self.accent_manager is not None:
+            output_path = os.path.join(trainer.output_path, "accents.pth")
+            self.accent_manager.save_ids_to_file(output_path)
+            trainer.config.accents_file = output_path
+            # some models don't have `model_args` set
+            if hasattr(trainer.config, "model_args"):
+                trainer.config.model_args.accents_file = output_path
+            trainer.config.save_json(os.path.join(trainer.output_path, "config.json"))
+            print(f" > `accents.pth` is saved to {output_path}.")
+            print(" > `accents_file` is updated in the config.json.")
 
         if self.language_manager is not None:
             output_path = os.path.join(trainer.output_path, "language_ids.json")
