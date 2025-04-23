@@ -24,7 +24,7 @@ torch.set_num_threads(24)
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
 # Name of the run for the Trainer
-RUN_NAME = "YourTTS-Finetune-VCTK"
+RUN_NAME = "YourTTS-Finetune-VCTK-AccEmb"
 
 # Path where you want to save the models outputs (configs, checkpoints and tensorboard logs)
 # OUT_PATH = os.path.dirname(os.path.abspath(__file__))  # "/raid/coqui/Checkpoints/original-YourTTS/"
@@ -121,6 +121,14 @@ for dataset_conf in DATASETS_CONFIG_LIST:
         )
     D_VECTOR_FILES.append(embeddings_file)
 
+D_VECTOR_ACCENT_FILES = []  # List of accent embeddings/d-vectors-accent to be used during the training
+
+# Iterates all the dataset configs checking if the speakers embeddings are already computated, if not compute it
+for dataset_conf in DATASETS_CONFIG_LIST:
+    # Check if the embeddings weren't already computed, if not compute it
+    embeddings_file = os.path.join(dataset_conf.path, "accents_v6.pth")
+    assert os.path.isfile(embeddings_file), "accent embeddings not calculated!!!"
+    D_VECTOR_ACCENT_FILES.append(embeddings_file)
 
 # Audio config used in training.
 audio_config = VitsAudioConfig(
@@ -143,6 +151,10 @@ model_args = VitsArgs(
     speaker_encoder_model_path=SPEAKER_ENCODER_CHECKPOINT_PATH,
     speaker_encoder_config_path=SPEAKER_ENCODER_CONFIG_PATH,
     
+    # add pre-computed accent embedding
+    d_vector_accent_file=D_VECTOR_ACCENT_FILES,
+    use_d_vector_accent_file=True,
+    d_vector_accent_dim=64,
 
     num_layers_text_encoder=10,
     resblock_type_decoder="2",  # In the paper, we accidentally trained the YourTTS using ResNet blocks type 2, if you like you can use the ResNet blocks type 1 like the VITS model
@@ -161,7 +173,7 @@ config = VitsConfig(
     model_args=model_args,
     run_name=RUN_NAME,
     project_name="YourTTS",
-    run_description="""YourTTS Finetuned on VCTK""",
+    run_description="""YourTTS Finetuned on VCTK (conditioned on accent embedding)""",
     dashboard_logger="tensorboard",
     logger_uri=None,
     audio=audio_config,
