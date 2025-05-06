@@ -31,7 +31,7 @@ RUN_NAME = "YourTTS-Finetune-VCTK"
 OUT_PATH = "/home/s2526235/AccentedTTS/models"
 
 # If you want to do transfer learning and speedup your training you can set here the path to the original YourTTS model
-RESTORE_PATH = "/home/s2526235/AccentedTTS/models/YourTTS-Base-LibriTTSR-June-24-2024_02+00AM-9f044d04/checkpoint_1000000.pth"  # "/root/.local/share/tts/tts_models--multilingual--multi-dataset--your_tts/model_file.pth"
+RESTORE_PATH = "/home/s2526235/AccentedTTS/models/YourTTS-Base-LibriTTSR-June-24-2024_02+00AM-9f044d04/checkpoint_1000000.pth"
 
 # This paramter is useful to debug, it skips the training epochs and just do the evaluation and produce the test sentences
 SKIP_TRAIN_EPOCH = False

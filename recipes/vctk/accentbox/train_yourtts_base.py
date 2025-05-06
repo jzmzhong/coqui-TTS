@@ -37,7 +37,7 @@ RESTORE_PATH = None  # "/root/.local/share/tts/tts_models--multilingual--multi-d
 SKIP_TRAIN_EPOCH = False
 
 # Set here the batch size to be used in training and evaluation
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 
 # Training Sampling rate and the target sampling rate for resampling the downloaded dataset (Note: If you change this you might need to redownload the dataset !!)
 # Note: If you add new datasets, please make sure that the dataset sampling rate and this parameter are matching, otherwise resample your audios
