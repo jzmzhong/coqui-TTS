@@ -24,7 +24,7 @@ torch.set_num_threads(24)
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
 # Name of the run for the Trainer
-RUN_NAME = "YourTTS-Finetune-VCTK-AccEmb"
+RUN_NAME = "YourTTS-Finetune-VCTK-AccEmbV6"
 
 # Path where you want to save the models outputs (configs, checkpoints and tensorboard logs)
 # OUT_PATH = os.path.dirname(os.path.abspath(__file__))  # "/raid/coqui/Checkpoints/original-YourTTS/"
@@ -126,7 +126,7 @@ D_VECTOR_ACCENT_FILES = []  # List of accent embeddings/d-vectors-accent to be u
 # Iterates all the dataset configs checking if the speakers embeddings are already computated, if not compute it
 for dataset_conf in DATASETS_CONFIG_LIST:
     # Check if the embeddings weren't already computed, if not compute it
-    embeddings_file = os.path.join(dataset_conf.path, "accents_v6.pth")
+    embeddings_file = os.path.join(dataset_conf.path, "GenAID_v6_embeddings/accents.pth")
     assert os.path.isfile(embeddings_file), "accent embeddings not calculated!!!"
     D_VECTOR_ACCENT_FILES.append(embeddings_file)
 
@@ -173,7 +173,7 @@ config = VitsConfig(
     model_args=model_args,
     run_name=RUN_NAME,
     project_name="YourTTS",
-    run_description="""YourTTS Finetuned on VCTK (conditioned on accent embedding)""",
+    run_description="""YourTTS Finetuned on VCTK (conditioned on GenAID accent embedding v6)""",
     dashboard_logger="tensorboard",
     logger_uri=None,
     audio=audio_config,

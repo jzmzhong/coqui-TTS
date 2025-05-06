@@ -1178,6 +1178,15 @@ class Vits(BaseTTS):
                 "slice_ids": slice_ids,
             }
         )
+
+        if self.args.formants_guidance:
+            outputs.update(
+                {
+                    "formant_gt": 0,
+                    "formant_pred": formant_pred,
+                }
+            )
+        
         return outputs
 
     @staticmethod
@@ -1495,7 +1504,7 @@ class Vits(BaseTTS):
             config = self.config
 
         # extract speaker and language info
-        text, speaker_name, style_wav, language_name = None, None, None, None
+        text, speaker_name, style_wav, language_name, accent_name = None, None, None, None, None
 
         if isinstance(sentence_info, list):
             if len(sentence_info) == 1:
@@ -1510,7 +1519,7 @@ class Vits(BaseTTS):
             text = sentence_info
 
         # get speaker id/d_vector
-        speaker_id, d_vector, accent_id, d_vector_accent, language_id = None, None, None
+        speaker_id, d_vector, accent_id, d_vector_accent, language_id = None, None, None, None, None
         if hasattr(self, "speaker_manager"):
             if config.use_d_vector_file:
                 if speaker_name is None:
