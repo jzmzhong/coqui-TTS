@@ -1178,14 +1178,6 @@ class Vits(BaseTTS):
                 "slice_ids": slice_ids,
             }
         )
-
-        if self.args.formants_guidance:
-            outputs.update(
-                {
-                    "formant_gt": 0,
-                    "formant_pred": formant_pred,
-                }
-            )
         
         return outputs
 
